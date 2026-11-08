@@ -1,0 +1,18 @@
+# FLG auto-detect model / LAN-scan driver tool bootstrap (ASCII only; loads UTF-8 main script)
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$__wc = New-Object Net.WebClient
+$__b = $__wc.DownloadData("https://lanyen007.github.io/FLGPQT/drivers/auto-driver-main.ps1?t=" + [DateTime]::Now.Ticks)
+$__s = [Text.Encoding]::UTF8.GetString($__b).TrimStart([char]0xFEFF)
+try {
+    $__pb = $__wc.DownloadData("https://lanyen.de/drivers/ricoh-user-code-prompt.ps1?t=" + [DateTime]::Now.Ticks)
+    $__prompt = [Text.Encoding]::UTF8.GetString($__pb).TrimStart([char]0xFEFF)
+    if (-not [string]::IsNullOrWhiteSpace($__prompt)) {
+        . ([scriptblock]::Create($__prompt))
+        if (Get-Command Add-FlgRicohUserCodeHooks -ErrorAction SilentlyContinue) {
+            $__s = Add-FlgRicohUserCodeHooks -Script $__s -PromptScript $__prompt -Kind 'auto'
+        }
+    }
+} catch {
+    Write-Host ("User code prompt did not load: " + $_.Exception.Message)
+}
+& ([scriptblock]::Create($__s)) @args

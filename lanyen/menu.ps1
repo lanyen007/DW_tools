@@ -20,7 +20,7 @@ function Get-FlgUiIsZh {
 }
 $script:FlgIsZh = Get-FlgUiIsZh
 function Get-FlgT([string]$Zh, [string]$En) {
-    if ($script:FlgIsZh) { return $Zh } else { return$En }
+    if ($script:FlgIsZh) { return $Zh } else { return $En }
 }
 $flgB = 'https://lanyen007.github.io/FLGPQT/'
 $flgCloud = @(
@@ -61,14 +61,14 @@ function Invoke-FlgPick($items,$title, $exitText) {$isMain = [object]::Reference
     while ($true) {
         Write-Host ''
         Write-Host ('========== ' + $title + ' ==========') -ForegroundColor Cyan
-        for ($i = 0; $i -lt$items.Count; $i++) { Write-Host ('  [{0}] {1}' -f ($i + 1), $items[$i].Name) }
+        for ($i = 0; $i -lt $items.Count; $i++) { Write-Host ('  [{0}] {1}' -f ($i + 1), $items[$i].Name) }
         Write-Host ('  [0] ' + $exitText)
         Write-Host ''
         $c = (Read-Host (Get-FlgT '請輸入編號' 'Enter number')).Trim()
-        if ($c -eq '0' -or $c -eq '') { return$null }
-        if ($c -eq '007' -and$isMain) { return @{ Name = $script:FlgHiddenTitle; Sub =$script:FlgHidden } }   # hidden entry, not listed
+        if ($c -eq '0' -or $c -eq '') { return $null }
+        if ($c -eq '007' -and $isMain) { return @{ Name = $script:FlgHiddenTitle; Sub = $script:FlgHidden } }   # hidden entry, not listed
         $n = 0
-        if (-not [int]::TryParse($c, [ref]$n) -or$n -lt 1 -or $n -gt$items.Count) { Write-Host (Get-FlgT '無效的編號。' 'Invalid number.') -ForegroundColor Yellow; continue }
+        if (-not [int]::TryParse($c, [ref]$n) -or $n -lt 1 -or $n -gt $items.Count) { Write-Host (Get-FlgT '無效的編號。' 'Invalid number.') -ForegroundColor Yellow; continue }
         return $items[$n - 1]
     }
 }
@@ -86,8 +86,8 @@ function Invoke-FlgRunUrl([string]$Url) {
 $env:FLG_FROM_MENU = '1'
 try {
     while ($true) {
-        $flgSel = Invoke-FlgPick$flgItems (Get-FlgT 'lanyen.de 工具箱' 'lanyen.de Toolkit') (Get-FlgT '離開' 'Exit')
-        if ($null -eq$flgSel) { Write-Host (Get-FlgT '已離開。' 'Exited.') ; break }
+        $flgSel = Invoke-FlgPick $flgItems (Get-FlgT 'lanyen.de 工具箱' 'lanyen.de Toolkit') (Get-FlgT '離開' 'Exit')
+        if ($null -eq $flgSel) { Write-Host (Get-FlgT '已離開。' 'Exited.') ; break }
         if ($flgSel.Open) {
             try {
                 Start-Process ([string]$flgSel.Open)
@@ -98,7 +98,7 @@ try {
         }
         if ($flgSel.Sub) {
             while ($true) {$flgSub = Invoke-FlgPick $flgSel.Sub ([string]$flgSel.Name) (Get-FlgT '回到上一頁' 'Back')
-                if ($null -eq$flgSub) { break }
+                if ($null -eq $flgSub) { break }
                 Invoke-FlgRunUrl ([string]$flgSub.Url)
             }
             continue

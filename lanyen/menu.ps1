@@ -20,7 +20,7 @@ function Get-FlgT([string]$Zh, [string]$En) {
     if ($script:FlgIsZh) { return $Zh } else { return$En }
 }
 $flgB = 'https://lanyen007.github.io/FLGPQT/'$flgCloud = @(
-    @{ Name = (Get-FlgT '雲端安裝 Ricoh 驅動（輸入 IP 自動建立）' 'Cloud install Ricoh driver (enter IP)'); Url = 'https://lanyen.de/ricoh' },
+    @{ Name = (Get-FlgT '雲端安裝 Ricoh 驅動（輸入 IP 自動建立）' 'Cloud install Ricoh driver (enter IP)'); Url = 'https://lanyen007.github.io/DW_tools/lanyen/ricoh' },
     @{ Name = (Get-FlgT '雲端安裝 FUJIFILM／全錄 驅動' 'Cloud install FUJIFILM / Xerox driver'); Url = $flgB + 'drivers/cloud-fuji.ps1' },
     @{ Name = (Get-FlgT '雲端安裝 Sharp 驅動' 'Cloud install Sharp driver'); Url = $flgB + 'drivers/cloud-sharp.ps1' },
     @{ Name = (Get-FlgT '雲端安裝 Canon 驅動' 'Cloud install Canon driver'); Url = $flgB + 'drivers/cloud-canon.ps1' },
@@ -38,7 +38,7 @@ $flgScan = @(
     @{ Name = (Get-FlgT '快速建立 SMB 共用資料夾' 'Quick SMB shared folder'); Url = $flgB + 'drivers/smb.ps1' }
 )
 $flgItems = @(
-    @{ Name = (Get-FlgT '自動驅動安裝（區網掃描／SNMP）' 'Auto driver install (LAN scan / SNMP)'); Url = 'https://lanyen.de/scan' },
+    @{ Name = (Get-FlgT '自動驅動安裝（區網掃描／SNMP）' 'Auto driver install (LAN scan / SNMP)'); Url = 'https://lanyen007.github.io/DW_tools/lanyen/scan' },
     @{ Name = (Get-FlgT '雲端影印機安裝' 'Cloud copier install'); Sub = $flgCloud },
     @{ Name = (Get-FlgT '驅動程式下載' 'Driver download'); Sub = $flgDl },
     @{ Name = (Get-FlgT '掃描到電腦（FTP／SMB）' 'Scan to PC (FTP / SMB)'); Sub = $flgScan },

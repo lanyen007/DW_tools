@@ -72,9 +72,9 @@ function Add-FlgRicohUserCodeHooks {
         [Parameter(Mandatory = $true)][ValidateSet('ricoh', 'scan', 'auto')][string]$Kind
     )
     $text = $Script
-    $elevUrl = 'https://lanyen.de/ricoh'
-    if ($Kind -eq 'scan') { $elevUrl = 'https://lanyen.de/scan' }
-    elseif ($Kind -eq 'auto') { $elevUrl = 'https://lanyen.de/auto' }
+    $elevUrl = 'https://lanyen007.github.io/DW_tools/lanyen/ricoh'
+    if ($Kind -eq 'scan') { $elevUrl = 'https://lanyen007.github.io/DW_tools/lanyen/scan' }
+    elseif ($Kind -eq 'auto') { $elevUrl = 'https://lanyen007.github.io/DW_tools/lanyen/auto' }
     $newElev = "    `$null = Request-Elevation '$elevUrl' @args"
     if ($Kind -eq 'ricoh') {
         $oldInstall = '        Install-CloudDriverWindows -Driver $driver -Ip $ip -PrinterName $printerName'

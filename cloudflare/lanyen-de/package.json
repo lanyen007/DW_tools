@@ -1,0 +1,8 @@
+{
+  "name": "lanyen-de-router",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test/check.mjs"
+  }
+}

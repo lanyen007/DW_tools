@@ -1,0 +1,23 @@
+{
+  // Deploy from this directory with `npx wrangler deploy` after DW_tools main
+  // is published to GitHub Pages. Uses a route in front of the existing
+  // lanyen.de GitHub Pages origin. Do not change DNS.
+  "name": "lanyen-de-router",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true
+    }
+  },
+  "vars": {
+    "SCRIPT_BASE": "https://lanyen007.github.io/DW_tools/lanyen",
+    "FLGPQT_BASE": "https://lanyen007.github.io/FLGPQT"
+  },
+  "routes": [
+    { "pattern": "lanyen.de/*", "zone_name": "lanyen.de" },
+    { "pattern": "www.lanyen.de/*", "zone_name": "lanyen.de" }
+  ]
+}

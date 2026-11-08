@@ -1,9 +1,12 @@
-
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
 try {
     $__flgHit = [Net.HttpWebRequest]::Create('https://abacus.jasoncameron.dev/hit/lanyen-de/menu')
-    $__flgHit.Method = 'GET'$__flgHit.Timeout = 2000
-    $__flgHit.ReadWriteTimeout = 2000$__flgHit.KeepAlive = $false$__flgHitResp = $__flgHit.GetResponse()$__flgHitResp.Close()
+    $__flgHit.Method = 'GET'
+    $__flgHit.Timeout = 2000
+    $__flgHit.ReadWriteTimeout = 2000
+    $__flgHit.KeepAlive = $false
+    $__flgHitResp = $__flgHit.GetResponse()
+    $__flgHitResp.Close()
 } catch {}
 function Get-FlgUiIsZh {
     try {
@@ -19,7 +22,8 @@ $script:FlgIsZh = Get-FlgUiIsZh
 function Get-FlgT([string]$Zh, [string]$En) {
     if ($script:FlgIsZh) { return $Zh } else { return$En }
 }
-$flgB = 'https://lanyen007.github.io/FLGPQT/'$flgCloud = @(
+$flgB = 'https://lanyen007.github.io/FLGPQT/'
+$flgCloud = @(
     @{ Name = (Get-FlgT '雲端安裝 Ricoh 驅動（輸入 IP 自動建立）' 'Cloud install Ricoh driver (enter IP)'); Url = 'https://lanyen007.github.io/DW_tools/lanyen/ricoh' },
     @{ Name = (Get-FlgT '雲端安裝 FUJIFILM／全錄 驅動' 'Cloud install FUJIFILM / Xerox driver'); Url = $flgB + 'drivers/cloud-fuji.ps1' },
     @{ Name = (Get-FlgT '雲端安裝 Sharp 驅動' 'Cloud install Sharp driver'); Url = $flgB + 'drivers/cloud-sharp.ps1' },
@@ -72,7 +76,9 @@ function Invoke-FlgRunUrl([string]$Url) {
     if ([string]::IsNullOrWhiteSpace($Url)) { return }
     try {
         $flgWc = New-Object Net.WebClient
-        $flgCode = [Text.Encoding]::UTF8.GetString($flgWc.DownloadData($Url + '?t=' + [DateTime]::Now.Ticks))$flgCode = $flgCode.TrimStart([char]0xFEFF) & ([scriptblock]::Create($flgCode))
+        $flgCode = [Text.Encoding]::UTF8.GetString($flgWc.DownloadData($Url + '?t=' + [DateTime]::Now.Ticks))
+        $flgCode = $flgCode.TrimStart([char]0xFEFF)
+        & ([scriptblock]::Create($flgCode))
     } catch {
         Write-Host ((Get-FlgT '執行失敗：' 'Failed: ') + $_.Exception.Message) -ForegroundColor Red
     }

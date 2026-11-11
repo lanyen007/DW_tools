@@ -341,7 +341,7 @@ body>pre,pre{font-size:18px;background:#f5f5f5;padding:12px 14px;border-radius:6
       var visible = (section.items || []).filter(function (item) {
         if (!q) return true;
         var models = (item.models || []).join(' ');
-        var hay = [item.name, item.brand, item.version, item.filename, models].join(' ').toLowerCase();
+        var hay = [item.name, item.brand, item.version, item.filename, item.note, models].join(' ').toLowerCase();
         return hay.indexOf(q) !== -1;
       });
       if (!visible.length) return;
@@ -350,12 +350,22 @@ body>pre,pre{font-size:18px;background:#f5f5f5;padding:12px 14px;border-radius:6
       sec.className = 'dl-sec';
       var h2 = document.createElement('h2');
       var key = 'sec_' + String(section.id || '').replace(/-/g, '_');
-      h2.textContent = t(key) + '（' + visible.length + '）';
+      var heading = t(key);
+      if (lang === 'zh' && section.titleZh) heading = section.titleZh;
+      else if (lang !== 'zh' && section.titleEn) heading = section.titleEn;
+      else if (section.titleZh) heading = section.titleZh;
+      h2.textContent = heading + '（' + visible.length + '）';
       sec.appendChild(h2);
-      if (section.id === 'common-tools') {
+      var sectionNote = '';
+      if (section.noteZh != null || section.noteEn != null) {
+        sectionNote = lang === 'zh' ? (section.noteZh || '') : (section.noteEn || '');
+      } else if (section.id === 'common-tools') {
+        sectionNote = t('dl_tools_note');
+      }
+      if (sectionNote) {
         var note = document.createElement('p');
         note.className = 'muted';
-        note.textContent = t('dl_tools_note');
+        note.textContent = sectionNote;
         sec.appendChild(note);
       }
       visible.forEach(function (item) {
@@ -373,6 +383,12 @@ body>pre,pre{font-size:18px;background:#f5f5f5;padding:12px 14px;border-radius:6
           meta.appendChild(metaSpan(t('dl_file'), item.filename));
         }
         card.appendChild(meta);
+        if (item.note) {
+          var itemNote = document.createElement('p');
+          itemNote.className = 'dl-models';
+          itemNote.textContent = item.note;
+          card.appendChild(itemNote);
+        }
         if (item.models && item.models.length > 1) {
           var models = item.models.slice(0, 8).join('、');
           if (item.models.length > 8) models += '…';

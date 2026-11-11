@@ -4,7 +4,7 @@ import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import worker, { decide, isPowerShellUserAgent } from "../src/index.js";
-import { CATALOG_SOURCES, buildCatalog, isGithubFileUrl, parseToolsScript, sizeFromHeaders } from "../src/catalog.js";
+import { CATALOG_SOURCES, buildCatalog, isGithubFileUrl, mergeDownloadConfig, parseToolsScript, sizeFromHeaders } from "../src/catalog.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const psUa = "Mozilla/5.0 (Windows NT; Windows NT 10.0; zh-TW) WindowsPowerShell/5.1.22621.2506";
@@ -190,6 +190,87 @@ function checkCatalogShape() {
   assert(hosts.every((host) => host === "github.com" || host === "raw.githubusercontent.com"), `off-github host ${hosts.join(" ")}`);
 }
 
+function sampleCatalog() {
+  return {
+    sections: [
+      {
+        id: "toolbox",
+        items: [
+          { name: "PQT.exe", brand: "PQT", version: "4.1.22", size: 100, url: "https://github.com/lanyen007/DW_tools/raw/main/PQT.exe", filename: "PQT.exe", models: null },
+          { name: "RICOH 使用者計數下載", brand: "RICOH", version: "1.0.1", size: 50, url: "https://github.com/lanyen007/DW_tools/raw/main/UserCounterDownload.exe", filename: "UserCounterDownload.exe", models: null },
+        ],
+      },
+      {
+        id: "cloud",
+        items: [
+          { name: "Ricoh PCL6", brand: "Ricoh", version: "4.46.0.0", size: 10, url: "https://github.com/lanyen007/FLGPQT/releases/download/drivers-ricoh-upd-pcl6-4.46.0.0/RICOH.zip", filename: "RICOH.zip", models: null },
+        ],
+      },
+    ],
+  };
+}
+
+function checkMerge() {
+  const base = sampleCatalog();
+  const untouched = mergeDownloadConfig(base, {});
+  assert(untouched.sections[0].id === "toolbox", "empty config keeps toolbox first");
+  assert(untouched.sections[0].titleZh === "工具", "default category title");
+  assert(untouched.sections[0].items.length === 2, "empty config keeps generated items");
+  assert(untouched.sections[1].items[0].name === "Ricoh PCL6", "cloud item unchanged");
+
+  const merged = mergeDownloadConfig(base, {
+    categories: [
+      { id: "extra", titleZh: "自訂分類", titleEn: "Extra", noteZh: "說明", noteEn: "Note" },
+      { id: "toolbox", titleZh: "本站工具", titleEn: "Site tools" },
+    ],
+    hidden: ["https://github.com/lanyen007/DW_tools/raw/main/UserCounterDownload.exe"],
+    overrides: {
+      "https://github.com/lanyen007/DW_tools/raw/main/PQT.exe": {
+        name: "PQT 工具",
+        brand: "lanyen",
+        version: "9.9.9",
+        url: "https://github.com/lanyen007/DW_tools/releases/download/downloads-uploads/PQT.exe",
+      },
+    },
+    custom: [
+      {
+        id: "scan-tool",
+        category: "extra",
+        name: "掃描小工具",
+        brand: "Sharp",
+        version: "1.2",
+        url: "https://github.com/lanyen007/DW_tools/releases/download/downloads-uploads/scan.exe",
+        note: "測試用",
+        filename: "scan.exe",
+        size: 4096,
+      },
+      {
+        id: "bad",
+        category: "extra",
+        name: "不該出現",
+        url: "https://www.mediafire.com/file/abc/x.exe/file",
+      },
+    ],
+    order: {
+      toolbox: ["https://github.com/lanyen007/DW_tools/raw/main/PQT.exe"],
+      cloud: [],
+    },
+  });
+  const byId = Object.fromEntries(merged.sections.map((section) => [section.id, section]));
+  assert(merged.sections[0].id === "extra", "new category is ordered first");
+  assert(byId.extra.titleZh === "自訂分類" && byId.extra.noteZh === "說明", "custom category text");
+  assert(byId.extra.items.length === 1 && byId.extra.items[0].name === "掃描小工具", "custom item added");
+  assert(byId.extra.items[0].note === "測試用" && byId.extra.items[0].size === 4096, "custom note and size");
+  assert(!JSON.stringify(merged).includes("mediafire"), "custom mediafire url is dropped");
+  assert(byId.toolbox.titleZh === "本站工具", "renamed category");
+  assert(byId.toolbox.items.length === 1, "hidden generated item is removed");
+  assert(byId.toolbox.items[0].name === "PQT 工具", "override name");
+  assert(byId.toolbox.items[0].brand === "lanyen" && byId.toolbox.items[0].version === "9.9.9", "override brand and version");
+  assert(byId.toolbox.items[0].url.endsWith("/downloads-uploads/PQT.exe"), "override url");
+  assert(byId.toolbox.items[0].size == null, "changed url is probed again");
+  assert(byId.cloud.items[0].name === "Ricoh PCL6", "untouched generated item stays");
+}
+
 async function checkRoutesWithFixtures() {
   const realFetch = globalThis.fetch;
   const sources = {
@@ -261,6 +342,7 @@ async function checkRoutesWithFixtures() {
 async function main() {
   checkDecisions();
   checkCatalogShape();
+  checkMerge();
   await checkRoutesWithFixtures();
   const filePort = 8765;
   const routerPort = 8766;

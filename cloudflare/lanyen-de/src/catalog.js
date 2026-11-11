@@ -283,6 +283,164 @@ export function buildCatalog(input) {
   };
 }
 
+export const DEFAULT_CATEGORIES = [
+  { id: "toolbox", titleZh: "工具", titleEn: "Tools", noteZh: "", noteEn: "" },
+  { id: "cloud", titleZh: "雲端通用驅動", titleEn: "Cloud universal drivers", noteZh: "", noteEn: "" },
+  { id: "fuji-old", titleZh: "舊版 FUJI", titleEn: "Legacy FUJI", noteZh: "", noteEn: "" },
+  {
+    id: "common-tools",
+    titleZh: "常用工具",
+    titleEn: "Common tools",
+    noteZh: "常用工具的版權屬於原作者與原廠。這裡是 GitHub 上的備份檔，供個人維修參考。",
+    noteEn: "Common tools remain the copyright of their authors and vendors. These GitHub copies are for personal repair use.",
+  },
+  { id: "github-models", titleZh: "其他 GitHub 驅動", titleEn: "Other GitHub drivers", noteZh: "", noteEn: "" },
+];
+
+const CATEGORY_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,40}$/;
+
+function textOrNull(value) {
+  if (value == null) return null;
+  return String(value);
+}
+
+function normalizeConfig(config) {
+  const src = config && typeof config === "object" ? config : {};
+  const categories = Array.isArray(src.categories) ? src.categories.filter((row) => row && CATEGORY_ID.test(row.id || "")) : [];
+  const hidden = Array.isArray(src.hidden) ? src.hidden.map((value) => String(value)) : [];
+  const overrides = src.overrides && typeof src.overrides === "object" && !Array.isArray(src.overrides) ? src.overrides : {};
+  const custom = Array.isArray(src.custom) ? src.custom : [];
+  const order = src.order && typeof src.order === "object" && !Array.isArray(src.order) ? src.order : {};
+  return { categories, hidden, overrides, custom, order };
+}
+
+function categoryRecord(id, config, defaults) {
+  const base = defaults.get(id) || { id, titleZh: id, titleEn: id, noteZh: "", noteEn: "" };
+  const found = config.categories.find((row) => row.id === id);
+  if (!found) {
+    return {
+      id,
+      titleZh: base.titleZh,
+      titleEn: base.titleEn,
+      noteZh: base.noteZh || "",
+      noteEn: base.noteEn || "",
+    };
+  }
+  return {
+    id,
+    titleZh: found.titleZh ? String(found.titleZh) : base.titleZh,
+    titleEn: found.titleEn ? String(found.titleEn) : base.titleEn,
+    noteZh: found.noteZh != null ? String(found.noteZh) : (base.noteZh || ""),
+    noteEn: found.noteEn != null ? String(found.noteEn) : (base.noteEn || ""),
+  };
+}
+
+export function mergeDownloadConfig(catalog, config) {
+  const cfg = normalizeConfig(config);
+  const defaults = new Map(DEFAULT_CATEGORIES.map((row) => [row.id, row]));
+  const hidden = new Set(cfg.hidden);
+  const items = [];
+  let seq = 0;
+  for (const section of (catalog && catalog.sections) || []) {
+    for (const item of section.items || []) {
+      const originUrl = item.url;
+      if (!originUrl || hidden.has(originUrl)) continue;
+      const override = cfg.overrides[originUrl] || {};
+      const category = textOrNull(override.category) || section.id;
+      let url = originUrl;
+      if (textOrNull(override.url) && isGithubFileUrl(override.url)) url = String(override.url);
+      const size = Object.prototype.hasOwnProperty.call(override, "size") && override.size != null
+        ? asSize(override.size)
+        : (url === originUrl ? asSize(item.size) : null);
+      items.push({
+        key: originUrl,
+        name: textOrNull(override.name) || item.name,
+        brand: textOrNull(override.brand) || item.brand,
+        version: textOrNull(override.version) != null && textOrNull(override.version) !== ""
+          ? String(override.version)
+          : item.version,
+        url,
+        filename: textOrNull(override.filename) || item.filename,
+        size,
+        note: textOrNull(override.note) || "",
+        models: item.models || null,
+        category: CATEGORY_ID.test(category) ? category : section.id,
+        seq,
+      });
+      seq += 1;
+    }
+  }
+  for (const custom of cfg.custom) {
+    if (!custom || !custom.id || hidden.has(`custom:${custom.id}`)) continue;
+    if (!isGithubFileUrl(custom.url)) continue;
+    const category = CATEGORY_ID.test(custom.category || "") ? custom.category : "toolbox";
+    items.push({
+      key: `custom:${custom.id}`,
+      name: textOrNull(custom.name) || custom.filename || custom.url,
+      brand: textOrNull(custom.brand) || "",
+      version: textOrNull(custom.version) || null,
+      url: String(custom.url),
+      filename: textOrNull(custom.filename) || null,
+      size: asSize(custom.size),
+      note: textOrNull(custom.note) || "",
+      models: null,
+      category,
+      seq,
+    });
+    seq += 1;
+  }
+
+  const used = [];
+  for (const item of items) {
+    if (!used.includes(item.category)) used.push(item.category);
+  }
+  const categoryIds = [];
+  if (cfg.categories.length) {
+    for (const row of cfg.categories) {
+      if (!categoryIds.includes(row.id)) categoryIds.push(row.id);
+    }
+  } else {
+    for (const row of DEFAULT_CATEGORIES) categoryIds.push(row.id);
+  }
+  for (const id of used) {
+    if (!categoryIds.includes(id)) categoryIds.push(id);
+  }
+
+  const sections = [];
+  for (const id of categoryIds) {
+    let rows = items.filter((item) => item.category === id);
+    const listed = Array.isArray(cfg.order[id]) ? cfg.order[id].map((value) => String(value)) : null;
+    if (listed && listed.length) {
+      const rank = new Map(listed.map((key, index) => [key, index]));
+      rows = rows.slice().sort((a, b) => {
+        const left = rank.has(a.key) ? rank.get(a.key) : 100000 + a.seq;
+        const right = rank.has(b.key) ? rank.get(b.key) : 100000 + b.seq;
+        return left - right;
+      });
+    }
+    if (!rows.length) continue;
+    const meta = categoryRecord(id, cfg, defaults);
+    sections.push({
+      id,
+      titleZh: meta.titleZh,
+      titleEn: meta.titleEn,
+      noteZh: meta.noteZh,
+      noteEn: meta.noteEn,
+      items: rows.map((row) => ({
+        name: row.name,
+        brand: row.brand,
+        version: row.version,
+        size: row.size,
+        url: row.url,
+        filename: row.filename,
+        note: row.note || null,
+        models: row.models,
+      })),
+    });
+  }
+  return { sections };
+}
+
 export function sizeFromHeaders(headers) {
   const range = headers.get("content-range") || "";
   const total = range.match(/\/(\d+)\s*$/);

@@ -2,8 +2,11 @@ import {
   CATALOG_SOURCES,
   applyUrlSizes,
   buildCatalog,
+  mergeDownloadConfig,
   sizeFromHeaders,
 } from "./catalog.js";
+
+const DOWNLOAD_CONFIG_URL = "https://raw.githubusercontent.com/lanyen007/DW_tools/main/downloads.json";
 
 // Sizes are read from the download URL itself. The GitHub REST API is not
 // used: a request with no User-Agent gets HTTP 403 ("administrative rules"),
@@ -137,10 +140,23 @@ async function loadSizes(fetchImpl, catalog, warnings) {
   applyUrlSizes(catalog, sizes);
 }
 
+async function loadDownloadConfig(fetchImpl, warnings) {
+  try {
+    const text = await fetchText(fetchImpl, DOWNLOAD_CONFIG_URL, "application/json, text/plain");
+    return JSON.parse(text);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/^404\b/.test(message)) return {};
+    warnings.push(`downloadConfig: ${message}`);
+    return {};
+  }
+}
+
 export async function loadCatalog(fetchImpl) {
   const fetchFn = fetchImpl || fetch;
   const { loaded, warnings } = await loadSources(fetchFn);
-  const catalog = buildCatalog(loaded);
+  const config = await loadDownloadConfig(fetchFn, warnings);
+  const catalog = mergeDownloadConfig(buildCatalog(loaded), config);
   await loadSizes(fetchFn, catalog, warnings);
   const count = catalog.sections.reduce((sum, section) => sum + section.items.length, 0);
   return {

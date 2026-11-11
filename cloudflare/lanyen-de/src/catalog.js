@@ -283,23 +283,21 @@ export function buildCatalog(input) {
   };
 }
 
-export function applySizeIndex(catalog, sizeIndex) {
-  const index = sizeIndex || new Map();
+export function sizeFromHeaders(headers) {
+  const range = headers.get("content-range") || "";
+  const total = range.match(/\/(\d+)\s*$/);
+  if (total) return Number(total[1]);
+  const length = (headers.get("content-length") || "").trim();
+  if (/^\d+$/.test(length)) return Number(length);
+  return null;
+}
+
+export function applyUrlSizes(catalog, sizesByUrl) {
+  const sizes = sizesByUrl || new Map();
   for (const section of catalog.sections) {
     for (const item of section.items) {
-      if (item.size != null) continue;
-      const parsed = parseGithubFile(item.url);
-      if (!parsed) continue;
-      const keys = [
-        `${parsed.repo}:${parsed.path}`,
-        parsed.release ? `${parsed.repo}:release:${parsed.filename}` : "",
-      ];
-      for (const key of keys) {
-        if (key && index.has(key)) {
-          item.size = index.get(key);
-          break;
-        }
-      }
+      if (item.size != null || !sizes.has(item.url)) continue;
+      item.size = sizes.get(item.url);
     }
   }
   return catalog;

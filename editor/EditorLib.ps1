@@ -30,6 +30,11 @@ function ConvertTo-LanyenPlain {
     if ($Value -is [string] -or $Value -is [bool] -or $Value -is [int] -or $Value -is [long] -or $Value -is [double] -or $Value -is [decimal]) {
         return $Value
     }
+    # PowerShell 7 ConvertFrom-Json turns ISO date strings into DateTime; walking its
+    # properties (Date.Date.Date...) recurses forever, so keep it as the original text form.
+    if ($Value -is [datetime]) { return $Value.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture) }
+    if ($Value -is [datetimeoffset]) { return $Value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture) }
+    if ($Value -is [ValueType]) { return $Value }
     if ($Value -is [System.Collections.IDictionary]) {
         $map = @{}
         foreach ($key in @($Value.Keys)) {
@@ -668,7 +673,8 @@ function Get-LanyenRemoteConfig {
         throw "讀取 downloads.json 失敗。`r`n$($result.Text)"
     }
     $payload = $result.Text | ConvertFrom-Json
-    $bytes = [Convert]::FromBase64String(([string]$payload.content) -replace '\s', '')
+    $clean = ([string]$payload.content) -replace '\s', ''
+    $bytes = [Convert]::FromBase64String($clean)
     $text = [System.Text.Encoding]::UTF8.GetString($bytes)
     if ($text.Length -gt 0 -and [int][char]$text[0] -eq 0xFEFF) { $text = $text.Substring(1) }
     return @{ Config = (ConvertFrom-LanyenConfigText $text); Sha = [string]$payload.sha; Missing = $false }

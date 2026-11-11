@@ -144,13 +144,17 @@ async function serveCatalog(request) {
       headers: jsonHeaders("no-store"),
     });
   }
+  const missingSize = catalog.sections.some((section) => section.items.some((item) => item.size == null));
   console.log(JSON.stringify({
     event: "catalog",
     count: catalog.count,
     warnings: catalog.warnings.length,
+    missingSize,
   }));
+  // A complete list can sit in the edge cache. A list with unknown sizes
+  // expires in a minute so a GitHub blip does not stick on the page.
   const response = new Response(JSON.stringify(catalog), {
-    headers: jsonHeaders("public, max-age=3600"),
+    headers: jsonHeaders(missingSize ? "public, max-age=60" : "public, max-age=3600"),
   });
   if (cache && !bypass && catalog.count > 0) {
     await cache.put(key, response.clone());

@@ -4,7 +4,7 @@ import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import worker, { decide, isPowerShellUserAgent } from "../src/index.js";
-import { CATALOG_SOURCES, buildCatalog, isGithubFileUrl, parseToolsScript } from "../src/catalog.js";
+import { CATALOG_SOURCES, buildCatalog, isGithubFileUrl, parseToolsScript, sizeFromHeaders } from "../src/catalog.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const psUa = "Mozilla/5.0 (Windows NT; Windows NT 10.0; zh-TW) WindowsPowerShell/5.1.22621.2506";
@@ -127,6 +127,12 @@ async function waitFor(url) {
 }
 
 function checkCatalogShape() {
+  assert(sizeFromHeaders(new Headers({ "content-length": "197120" })) === 197120, "content-length");
+  assert(sizeFromHeaders(new Headers({
+    "content-length": "1",
+    "content-range": "bytes 0-0/50688",
+  })) === 50688, "content-range wins over a one-byte length");
+  assert(sizeFromHeaders(new Headers()) === null, "missing length");
   assert(isGithubFileUrl("https://github.com/lanyen007/DW_tools/raw/main/PQT.exe"), "github raw alias");
   assert(isGithubFileUrl("https://raw.githubusercontent.com/lanyen007/DW_tools/cursor/ricoh-mp-c3300-c4500-0e0c/drivers/ricoh/RICOH_MPC_3300_X32_RPCS.exe"), "branch raw url");
   assert(!isGithubFileUrl("https://www.mediafire.com/file/abc/x.exe/file"), "mediafire excluded");
@@ -184,13 +190,6 @@ function checkCatalogShape() {
   assert(hosts.every((host) => host === "github.com" || host === "raw.githubusercontent.com"), `off-github host ${hosts.join(" ")}`);
 }
 
-function jsonResponse(value) {
-  return new Response(JSON.stringify(value), {
-    status: 200,
-    headers: { "content-type": "application/json; charset=utf-8" },
-  });
-}
-
 async function checkRoutesWithFixtures() {
   const realFetch = globalThis.fetch;
   const sources = {
@@ -203,15 +202,27 @@ async function checkRoutesWithFixtures() {
     [CATALOG_SOURCES.sharp]: JSON.stringify({ drivers: [] }),
     [CATALOG_SOURCES.toolsText]: "# no tools in this fixture\n",
   };
-  globalThis.fetch = async (input) => {
+  let apiCalls = 0;
+  globalThis.fetch = async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
-    if (sources[url]) return new Response(sources[url], { status: 200 });
-    if (url.endsWith("/repos/lanyen007/DW_tools/contents")) {
-      return jsonResponse([
-        { name: "PQT.exe", path: "PQT.exe", size: 197120 },
-        { name: "UserCounterDownload.exe", path: "UserCounterDownload.exe", size: 50688 },
-      ]);
+    const method = ((init && init.method) || (input instanceof Request ? input.method : "GET")).toUpperCase();
+    if (url.includes("api.github.com")) {
+      apiCalls += 1;
+      return new Response("forbidden", { status: 403 });
     }
+    if (method === "HEAD" && url.endsWith("/PQT.exe")) {
+      return new Response(null, { status: 200, headers: { "content-length": "197120" } });
+    }
+    if (method === "HEAD" && url.endsWith("/UserCounterDownload.exe")) {
+      return new Response(null, { status: 200 });
+    }
+    if (method === "GET" && url.endsWith("/UserCounterDownload.exe")) {
+      return new Response("x", {
+        status: 206,
+        headers: { "content-length": "1", "content-range": "bytes 0-0/50688" },
+      });
+    }
+    if (sources[url]) return new Response(sources[url], { status: 200 });
     if (url.includes("menu.ps1")) return new Response("try { menu }\n", { status: 200 });
     return new Response(`missing ${url}`, { status: 404 });
   };
@@ -236,9 +247,11 @@ async function checkRoutesWithFixtures() {
     const catalog = await catalogResponse.json();
     assert(catalogResponse.status === 200, "catalog status");
     const toolbox = catalog.sections.find((section) => section.id === "toolbox");
-    assert(toolbox.items[0].size === 197120, "pqt size from GitHub contents");
+    assert(toolbox.items[0].size === 197120, "pqt size from content-length");
+    assert(toolbox.items[1].size === 50688, "counter size from content-range");
     assert(toolbox.items[1].filename === "UserCounterDownload.exe", "ascii counter filename");
     assert(toolbox.items[1].version === "1.0.1", "counter version");
+    assert(apiCalls === 0, "catalog does not call the GitHub API");
     assert(catalog.warnings.length === 0, `catalog warnings ${catalog.warnings.join("; ")}`);
   } finally {
     globalThis.fetch = realFetch;

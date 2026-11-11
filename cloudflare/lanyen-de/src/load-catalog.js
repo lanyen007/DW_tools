@@ -1,9 +1,17 @@
 import {
   CATALOG_SOURCES,
-  applySizeIndex,
+  applyUrlSizes,
   buildCatalog,
-  parseGithubFile,
+  sizeFromHeaders,
 } from "./catalog.js";
+
+// Sizes are read from the download URL itself. The GitHub REST API is not
+// used: a request with no User-Agent gets HTTP 403 ("administrative rules"),
+// and api.github.com also allows only 60 unauthenticated requests per hour
+// per egress IP. Cloudflare Workers share those IPs, so the same 403 shows
+// up in production even though this Worker sends a User-Agent. The catalog
+// JSON already loads from raw.githubusercontent.com, and a HEAD of the file
+// returns Content-Length without touching that API.
 
 const MAX_BYTES = 2_000_000;
 const FETCH_TIMEOUT_MS = 20_000;
@@ -66,75 +74,67 @@ async function loadSources(fetchImpl) {
   return { loaded, warnings };
 }
 
-function releaseTags(catalog) {
-  const tags = new Map();
-  for (const section of catalog.sections) {
-    for (const item of section.items) {
-      if (item.size != null) continue;
-      const parsed = parseGithubFile(item.url);
-      if (parsed && parsed.release) {
-        tags.set(`${parsed.repo}:${parsed.release}`, parsed);
-      }
-    }
-  }
-  return [...tags.values()];
+const SIZE_CONCURRENCY = 6;
+
+async function cancelBody(response) {
+  if (response.body) await response.body.cancel();
 }
 
-function rememberContents(index, repo, entries) {
-  const rows = Array.isArray(entries) ? entries : [];
-  for (const entry of rows) {
-    if (!entry || typeof entry.size !== "number" || !entry.path) continue;
-    index.set(`${repo}:${entry.path}`, entry.size);
+async function probeSize(fetchImpl, url) {
+  try {
+    const head = await fetchImpl(url, {
+      method: "HEAD",
+      redirect: "follow",
+      cache: "no-store",
+      headers: { "user-agent": "lanyen-de-catalog" },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    const fromHead = sizeFromHeaders(head.headers);
+    await cancelBody(head);
+    if (head.ok && fromHead != null) return fromHead;
+  } catch {
+    // HEAD is optional. A one-byte range still carries the full size.
   }
+
+  const ranged = await fetchImpl(url, {
+    method: "GET",
+    redirect: "follow",
+    cache: "no-store",
+    headers: { "user-agent": "lanyen-de-catalog", range: "bytes=0-0" },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  const fromRange = sizeFromHeaders(ranged.headers);
+  await cancelBody(ranged);
+  if ((ranged.ok || ranged.status === 206) && fromRange != null) return fromRange;
+  throw new Error(`${ranged.status} ${url}`);
 }
 
 async function loadSizes(fetchImpl, catalog, warnings) {
-  const index = new Map();
-  const jobs = [];
-  const needs = (predicate) => catalog.sections.some((section) => section.items.some((item) => {
-    if (item.size != null) return false;
-    const parsed = parseGithubFile(item.url);
-    return parsed && predicate(parsed);
-  }));
-
-  async function contents(repo, path) {
-      const suffix = path ? `/${path}` : "";
-      const url = `https://api.github.com/repos/lanyen007/${repo}/contents${suffix}`;
-    try {
-      const text = await fetchText(fetchImpl, url, "application/vnd.github+json");
-      rememberContents(index, repo, JSON.parse(text));
-    } catch (error) {
-      warnings.push(`size ${repo}/${path}: ${error instanceof Error ? error.message : String(error)}`);
+  const urls = [];
+  const seen = new Set();
+  for (const section of catalog.sections) {
+    for (const item of section.items) {
+      if (item.size != null || seen.has(item.url)) continue;
+      seen.add(item.url);
+      urls.push(item.url);
     }
   }
-
-  if (needs((parsed) => parsed.repo === "FLGPQT" && parsed.path.startsWith("drivers/packages/fuji-old/"))) {
-    jobs.push(contents("FLGPQT", "drivers/packages/fuji-old"));
-  }
-  if (needs((parsed) => parsed.repo === "DW_tools" && !parsed.path.includes("/"))) {
-    jobs.push(contents("DW_tools", ""));
-  }
-  if (needs((parsed) => parsed.repo === "DW_tools" && parsed.path.startsWith("drivers/ricoh/"))) {
-    jobs.push(contents("DW_tools", "drivers/ricoh"));
-  }
-  for (const release of releaseTags(catalog)) {
-    jobs.push((async () => {
-      const url = `https://api.github.com/repos/lanyen007/${release.repo}/releases/tags/${release.release}`;
+  const sizes = new Map();
+  let cursor = 0;
+  async function worker() {
+    while (cursor < urls.length) {
+      const url = urls[cursor];
+      cursor += 1;
       try {
-        const text = await fetchText(fetchImpl, url, "application/vnd.github+json");
-        const body = JSON.parse(text);
-        for (const asset of body.assets || []) {
-          if (asset && typeof asset.size === "number" && asset.name) {
-            index.set(`${release.repo}:release:${asset.name}`, asset.size);
-          }
-        }
+        sizes.set(url, await probeSize(fetchImpl, url));
       } catch (error) {
-        warnings.push(`size ${release.repo}@${release.release}: ${error instanceof Error ? error.message : String(error)}`);
+        warnings.push(`size ${url}: ${error instanceof Error ? error.message : String(error)}`);
       }
-    })());
+    }
   }
-  await Promise.all(jobs);
-  applySizeIndex(catalog, index);
+  const workers = Math.min(SIZE_CONCURRENCY, urls.length);
+  await Promise.all(Array.from({ length: workers }, () => worker()));
+  applyUrlSizes(catalog, sizes);
 }
 
 export async function loadCatalog(fetchImpl) {

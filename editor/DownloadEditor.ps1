@@ -229,8 +229,7 @@ function Show-LanyenEditor {
 
     $split = New-Object System.Windows.Forms.SplitContainer
     $split.Dock = 'Fill'
-    $split.Panel1MinSize = 280
-    $split.Panel2MinSize = 320
+    # Min sizes are set in Add_Shown: the container is only 150px wide until the form lays out.
 
     $script:Search = New-Object System.Windows.Forms.TextBox
     $script:Search.Dock = 'Top'
@@ -515,11 +514,15 @@ function Show-LanyenEditor {
         $script:Sha = $saved.Sha
         $script:LoadedJson = ConvertTo-LanyenConfigJson $script:Config
         Set-LanyenStatus ("已提交：{0}" -f $message)
-        [System.Windows.Forms.MessageBox]::Show("已寫入 DW_tools 的 main。`r`n$message`r`n網站要等 Worker 重新部署後才會讀到這份設定。", '已發布') | Out-Null
+        [System.Windows.Forms.MessageBox]::Show("已寫入 DW_tools 的 main。`r`n$message`r`n網站下載頁稍後會自動更新。", '已發布') | Out-Null
     })
 
     $form.Add_Shown({
-        try { $split.SplitterDistance = 440 } catch {}
+        try {
+            $split.Panel1MinSize = 280
+            $split.Panel2MinSize = 320
+            $split.SplitterDistance = 440
+        } catch {}
         try { Reload-LanyenData } catch {
             Set-LanyenStatus $_.Exception.Message
             [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, '載入失敗', 'OK', 'Warning') | Out-Null

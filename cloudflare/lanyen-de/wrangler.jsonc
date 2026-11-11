@@ -1,7 +1,8 @@
 {
-  // Deploy from this directory with `npx wrangler deploy` after DW_tools main
-  // is published to GitHub Pages. Uses a route in front of the existing
-  // lanyen.de GitHub Pages origin. Do not change DNS.
+  // Deploy manually from this directory with `npx wrangler deploy`.
+  // This repo has no GitHub Actions workflow. Do not change DNS.
+  // Browser requests for / are served by the Worker. Other paths pass
+  // through to the existing lanyen.de GitHub Pages origin.
   "name": "lanyen-de-router",
   "main": "src/index.js",
   "compatibility_date": "2026-11-08",

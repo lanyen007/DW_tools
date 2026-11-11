@@ -4,6 +4,7 @@ import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import worker, { decide, isPowerShellUserAgent } from "../src/index.js";
+import { CATALOG_SOURCES, buildCatalog, isGithubFileUrl, parseToolsScript } from "../src/catalog.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const psUa = "Mozilla/5.0 (Windows NT; Windows NT 10.0; zh-TW) WindowsPowerShell/5.1.22621.2506";
@@ -21,9 +22,11 @@ function checkDecisions() {
   assert(!isPowerShellUserAgent(""), "empty UA");
 
   assert(decide("/", psUa).file === "menu.ps1", "/ powershell -> menu");
-  assert(decide("/", browserUa).action === "origin", "/ browser -> origin");
+  assert(decide("/", browserUa).action === "page", "/ browser -> page");
   assert(decide("/index.html", psUa).file === "menu.ps1", "index.html powershell -> menu");
-  assert(decide("/index.html", browserUa).action === "origin", "index.html browser -> origin");
+  assert(decide("/index.html", browserUa).action === "page", "index.html browser -> page");
+  assert(decide("/downloads.json", psUa).action === "catalog", "downloads.json is not the menu");
+  assert(decide("/downloads.json", browserUa).action === "catalog", "downloads.json for browsers");
   assert(decide("/ricoh", browserUa).file === "ricoh", "ricoh is a script for every UA");
   assert(decide("/scan/", psUa).file === "scan", "trailing slash");
   assert(decide("/pc", psUa).base === "flgpqt" && decide("/pc", psUa).file === "drivers/pc.ps1", "pc stays on FLGPQT");
@@ -100,6 +103,7 @@ function parsePs(file) {
     const child = spawn("pwsh", ["-NoLogo", "-Command", command], { stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
     let err = "";
+    child.on("error", (error) => reject(error));
     child.stdout.on("data", (chunk) => { out += chunk; });
     child.stderr.on("data", (chunk) => { err += chunk; });
     child.on("close", (code) => {
@@ -122,8 +126,129 @@ async function waitFor(url) {
   throw new Error(`timed out waiting for ${url}`);
 }
 
+function checkCatalogShape() {
+  assert(isGithubFileUrl("https://github.com/lanyen007/DW_tools/raw/main/PQT.exe"), "github raw alias");
+  assert(isGithubFileUrl("https://raw.githubusercontent.com/lanyen007/DW_tools/cursor/ricoh-mp-c3300-c4500-0e0c/drivers/ricoh/RICOH_MPC_3300_X32_RPCS.exe"), "branch raw url");
+  assert(!isGithubFileUrl("https://www.mediafire.com/file/abc/x.exe/file"), "mediafire excluded");
+  assert(!isGithubFileUrl("https://support.ricoh.com/bb/pub_e/x.exe"), "vendor site excluded");
+  assert(!isGithubFileUrl("https://github.com/lanyen007/FLGPQT/tree/main/drivers/packages/fuji-old"), "tree page excluded");
+  const tools = parseToolsScript(`
+    $ReleaseTag = 'tools-mediafire-20261101'
+    @{
+        Key = 'desk'
+        File = 'sharpdesk3.3.exe'
+        Title = 'Sharpdesk 3.3'
+        Size = 12L
+        Note = '約 587 MB'
+    }
+  `);
+  assert(tools.length === 1 && tools[0].version === "3.3", "tool version from title");
+  assert(tools[0].url.endsWith("/tools-mediafire-20261101/sharpdesk3.3.exe"), "tool release url");
+
+  const catalog = buildCatalog({
+    pqtVersion: { version: "4.1.22", url: "https://github.com/lanyen007/DW_tools/raw/main/PQT.exe" },
+    counterVersion: { version: "1.0.1", url: "https://github.com/lanyen007/DW_tools/raw/main/UserCounterDownload.exe" },
+    cloud: { drivers: [
+      { title: "Ricoh PCL6", brand: "Ricoh", version: "4.46.0.0", filename: "RICOH.zip", size: 10, url: "https://github.com/lanyen007/FLGPQT/releases/download/drivers-ricoh-upd-pcl6-4.46.0.0/RICOH.zip" },
+      { title: "MediaFire driver", url: "https://www.mediafire.com/file/abc/x.exe/file" },
+    ] },
+    fujiOld: { drivers: [
+      { title: "IV · 2.6.13.1 · a.exe", filename: "a.exe", url: "https://raw.githubusercontent.com/lanyen007/FLGPQT/main/drivers/packages/fuji-old/a.exe" },
+      { title: "DocuPrint shares a.exe", filename: "a.exe", url: "https://raw.githubusercontent.com/lanyen007/FLGPQT/main/drivers/packages/fuji-old/a.exe" },
+    ] },
+    ricoh: { brand: "Ricoh", drivers: [
+      { id: "ricoh-37", model: "MP C3300", title: "MP C3300 · RPCS · Win32", filename: "RICOH_MPC_3300_X32_RPCS.exe", url: "https://raw.githubusercontent.com/lanyen007/DW_tools/cursor/ricoh-mp-c3300-c4500-0e0c/drivers/ricoh/RICOH_MPC_3300_X32_RPCS.exe" },
+      { title: "official", url: "https://support.ricoh.com/bb/x.exe" },
+    ] },
+    fuji: { drivers: [
+      { title: "duplicate of fuji-old", filename: "a.exe", url: "https://raw.githubusercontent.com/lanyen007/FLGPQT/main/drivers/packages/fuji-old/a.exe" },
+    ] },
+    sharp: { brand: "Sharp", drivers: [
+      { model: "MX-1", title: "MX-1", filename: "same.exe", notes: "PCL6 01.01.00.06", url: "https://github.com/lanyen007/FLGPQT/releases/download/drivers-sharp-missing-20261102/same.exe" },
+      { model: "MX-2", title: "MX-2", filename: "same.exe", notes: "PCL6 01.01.00.06", url: "https://github.com/lanyen007/FLGPQT/releases/download/drivers-sharp-missing-20261102/same.exe" },
+    ] },
+    toolsText: "$ReleaseTag = 'tools-mediafire-20261101'\n@{ Key = 'desk'\n File = 'sharpdesk3.3.exe'\n Title = 'Sharpdesk 3.3'\n Size = 12L\n Note = 'desk' }",
+  });
+  const byId = Object.fromEntries(catalog.sections.map((section) => [section.id, section]));
+  assert(byId.toolbox.items.map((item) => item.filename).join() === "PQT.exe,UserCounterDownload.exe", "toolbox files");
+  assert(byId.toolbox.items[0].version === "4.1.22", "pqt version");
+  assert(byId.cloud.items.length === 1 && byId.cloud.items[0].version === "4.46.0.0", "cloud keeps github zip only");
+  assert(byId["fuji-old"].items.length === 2, "fuji-old keeps both catalog rows");
+  assert(byId["fuji-old"].items[0].version === "2.6.13.1", "version guessed from title");
+  assert(byId["common-tools"].items[0].brand === "Sharp", "sharpdesk brand");
+  assert(byId["github-models"].items.length === 2, "ricoh raw plus one sharp file");
+  assert(byId["github-models"].items.some((item) => item.filename === "RICOH_MPC_3300_X32_RPCS.exe"), "ricoh-37 file");
+  const sharp = byId["github-models"].items.find((item) => item.filename === "same.exe");
+  assert(sharp.models.join() === "MX-1,MX-2" && sharp.version === "01.01.00.06", "sharp models grouped");
+  const hosts = catalog.sections.flatMap((section) => section.items.map((item) => new URL(item.url).hostname));
+  assert(hosts.every((host) => host === "github.com" || host === "raw.githubusercontent.com"), `off-github host ${hosts.join(" ")}`);
+}
+
+function jsonResponse(value) {
+  return new Response(JSON.stringify(value), {
+    status: 200,
+    headers: { "content-type": "application/json; charset=utf-8" },
+  });
+}
+
+async function checkRoutesWithFixtures() {
+  const realFetch = globalThis.fetch;
+  const sources = {
+    [CATALOG_SOURCES.pqtVersion]: JSON.stringify({ version: "4.1.22", url: "https://github.com/lanyen007/DW_tools/raw/main/PQT.exe" }),
+    [CATALOG_SOURCES.counterVersion]: JSON.stringify({ version: "1.0.1", url: "https://github.com/lanyen007/DW_tools/raw/main/UserCounterDownload.exe" }),
+    [CATALOG_SOURCES.cloud]: JSON.stringify({ drivers: [] }),
+    [CATALOG_SOURCES.fujiOld]: JSON.stringify({ drivers: [] }),
+    [CATALOG_SOURCES.ricoh]: JSON.stringify({ drivers: [] }),
+    [CATALOG_SOURCES.fuji]: JSON.stringify({ drivers: [] }),
+    [CATALOG_SOURCES.sharp]: JSON.stringify({ drivers: [] }),
+    [CATALOG_SOURCES.toolsText]: "# no tools in this fixture\n",
+  };
+  globalThis.fetch = async (input) => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (sources[url]) return new Response(sources[url], { status: 200 });
+    if (url.endsWith("/repos/lanyen007/DW_tools/contents")) {
+      return jsonResponse([
+        { name: "PQT.exe", path: "PQT.exe", size: 197120 },
+        { name: "UserCounterDownload.exe", path: "UserCounterDownload.exe", size: 50688 },
+      ]);
+    }
+    if (url.includes("menu.ps1")) return new Response("try { menu }\n", { status: 200 });
+    return new Response(`missing ${url}`, { status: 404 });
+  };
+  try {
+    const page = await worker.fetch(new Request("https://lanyen.de/", { headers: { "user-agent": browserUa } }));
+    const html = await page.text();
+    assert(page.headers.get("content-type").includes("text/html"), "page content-type");
+    assert(html.includes('data-t="t-dl"'), "download tab");
+    assert(html.includes("下載"), "download label");
+    assert(html.includes("irm lanyen.de | iex"), "install command stays");
+    assert(!html.includes("Get-FlgUiIsZh"), "page is not the menu script");
+
+    const menu = await worker.fetch(new Request("https://lanyen.de/", { headers: { "user-agent": psUa } }));
+    const menuBody = await menu.text();
+    assert(menu.headers.get("content-type").includes("text/plain"), "powershell content-type");
+    assert(menuBody.startsWith("try "), "powershell body is the menu");
+    assert(!menuBody.includes("t-dl"), "powershell body has no download tab");
+
+    const catalogResponse = await worker.fetch(new Request("https://lanyen.de/downloads.json", {
+      headers: { "user-agent": psUa },
+    }));
+    const catalog = await catalogResponse.json();
+    assert(catalogResponse.status === 200, "catalog status");
+    const toolbox = catalog.sections.find((section) => section.id === "toolbox");
+    assert(toolbox.items[0].size === 197120, "pqt size from GitHub contents");
+    assert(toolbox.items[1].filename === "UserCounterDownload.exe", "ascii counter filename");
+    assert(toolbox.items[1].version === "1.0.1", "counter version");
+    assert(catalog.warnings.length === 0, `catalog warnings ${catalog.warnings.join("; ")}`);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
 async function main() {
   checkDecisions();
+  checkCatalogShape();
+  await checkRoutesWithFixtures();
   const filePort = 8765;
   const routerPort = 8766;
   const files = startFileServer(filePort);
@@ -151,6 +276,7 @@ async function main() {
     const browserBody = await import("node:fs").then((fs) => fs.readFileSync("/tmp/lanyen-browser.body"));
     const psBody = await import("node:fs").then((fs) => fs.readFileSync("/tmp/lanyen-ps.body"));
     assert(browserBody.includes("<!doctype html>"), "browser body is HTML");
+    assert(browserBody.includes('data-t="t-dl"'), "served page has the download tab");
     assert(!browserBody.includes("Get-FlgUiIsZh"), "browser body is not the menu script");
     assert(psBody.subarray(0, 4).toString() === "try ", "powershell body is the menu");
     assert(!psBody.includes("<!doctype"), "powershell body has no HTML");
@@ -160,6 +286,8 @@ async function main() {
     assert(ricoh.includes("github.io/DW_tools/lanyen/drivers/ricoh-user-code-prompt.ps1"), "ricoh prompt moved");
     assert(!ricoh.includes("lanyen.de/"), "ricoh has no lanyen.de download");
     assert(pc.includes("pc-main.ps1"), "pc alias reaches FLGPQT");
+    const map = await curl(["-A", browserUa, `http://127.0.0.1:${routerPort}/map.html`]);
+    assert(map.includes("<p>browser</p>"), "map.html still passes through to the origin");
 
     const parsed = await parsePs("/tmp/lanyen-ps.body");
     console.log("browser headers:\n" + browser);

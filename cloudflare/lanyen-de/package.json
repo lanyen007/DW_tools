@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node test/check.mjs"
+    "test": "node test/check.mjs",
+    "live-links": "node test/live-links.mjs"
   }
 }

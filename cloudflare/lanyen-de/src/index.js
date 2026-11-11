@@ -1,7 +1,12 @@
 // Routes lanyen.de by User-Agent.
-// PowerShell (irm) receives a raw script. Browsers receive the existing
-// GitHub Pages origin. fetch(request) is the route pass-through to that
-// origin; do not replace the DNS records.
+// PowerShell (irm) receives a raw script. Browsers requesting / receive the
+// toolkit page from this Worker, including the download tab. Every other
+// path still passes through to the GitHub Pages origin (the private
+// lanyen.de repository). fetch(request) is that pass-through; do not
+// replace the DNS records.
+
+import { loadCatalog } from "./load-catalog.js";
+import { renderPage } from "./page.js";
 
 const DEFAULT_SCRIPT_BASE = "https://lanyen007.github.io/DW_tools/lanyen";
 const DEFAULT_FLGPQT_BASE = "https://lanyen007.github.io/FLGPQT";
@@ -46,9 +51,11 @@ export function normalizePath(pathname) {
 
 export function decide(pathname, userAgent) {
   const path = normalizePath(pathname);
-  if ((path === "/" || path === "/index.html") && isPowerShellUserAgent(userAgent)) {
-    return { action: "script", base: "dw", file: "menu.ps1" };
+  if (path === "/" || path === "/index.html") {
+    if (isPowerShellUserAgent(userAgent)) return { action: "script", base: "dw", file: "menu.ps1" };
+    return { action: "page" };
   }
+  if (path === "/downloads.json") return { action: "catalog" };
   if (Object.prototype.hasOwnProperty.call(MOVED, path)) {
     return { action: "script", base: "dw", file: MOVED[path] };
   }
@@ -94,11 +101,74 @@ async function proxyScript(target) {
   return new Response(upstream.body, { status: upstream.status, headers: textHeaders() });
 }
 
+function htmlHeaders() {
+  return {
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "public, max-age=300",
+  };
+}
+
+function jsonHeaders(cacheControl) {
+  return {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": cacheControl,
+  };
+}
+
+function defaultCache() {
+  try {
+    return globalThis.caches && globalThis.caches.default;
+  } catch {
+    return null;
+  }
+}
+
+async function serveCatalog(request) {
+  const cache = defaultCache();
+  const key = new Request(new URL("/downloads.json", request.url), { method: "GET" });
+  const bypass = /no-cache|no-store/i.test(request.headers.get("cache-control") || "");
+  if (cache && !bypass) {
+    const hit = await cache.match(key);
+    if (hit) return hit;
+  }
+  let catalog;
+  try {
+    catalog = await loadCatalog(fetch);
+  } catch (error) {
+    console.log(JSON.stringify({
+      event: "catalog-error",
+      message: error instanceof Error ? error.message : String(error),
+    }));
+    return new Response(JSON.stringify({ error: "catalog-failed", sections: [] }), {
+      status: 502,
+      headers: jsonHeaders("no-store"),
+    });
+  }
+  console.log(JSON.stringify({
+    event: "catalog",
+    count: catalog.count,
+    warnings: catalog.warnings.length,
+  }));
+  const response = new Response(JSON.stringify(catalog), {
+    headers: jsonHeaders("public, max-age=3600"),
+  });
+  if (cache && !bypass && catalog.count > 0) {
+    await cache.put(key, response.clone());
+  }
+  return response;
+}
+
 export default {
   async fetch(request, env) {
     const decision = decide(new URL(request.url).pathname, request.headers.get("user-agent"));
     if (decision.action === "script") {
       return proxyScript(upstreamUrl(decision, request.url, env));
+    }
+    if (decision.action === "page") {
+      return new Response(renderPage(), { status: 200, headers: htmlHeaders() });
+    }
+    if (decision.action === "catalog") {
+      return serveCatalog(request);
     }
     try {
       return await fetch(request);

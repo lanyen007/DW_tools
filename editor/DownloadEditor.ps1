@@ -15,8 +15,11 @@ $script:SelectedKey = ''
 function New-LanyenLabel([string]$Text) {
     $label = New-Object System.Windows.Forms.Label
     $label.Text = $Text
-    $label.AutoSize = $true
-    $label.Margin = New-Object System.Windows.Forms.Padding(0, 8, 0, 2)
+    # Dock=Top like the boxes; without it every label sits at (0,0) and they overlap.
+    $label.Dock = 'Top'
+    $label.AutoSize = $false
+    $label.Height = 30
+    $label.TextAlign = 'BottomLeft'
     return $label
 }
 
@@ -237,21 +240,32 @@ function Show-LanyenEditor {
     $script:Tree.Dock = 'Fill'
     $script:Tree.HideSelection = $false
 
-    $buttons = New-Object System.Windows.Forms.FlowLayoutPanel
-    $buttons.Dock = 'Bottom'
-    $buttons.Height = 84
-    $buttons.WrapContents = $true
-    $names = @('新增項目', '新增分類', '隱藏', '上移', '下移', '檢查連結', '上傳到 Release', '預覽線上', '重新載入', '儲存並發布')
+    # Top toolbar. ToolStripButton has Text and Add_Click, same as Button, so handlers below are unchanged.
+    $toolbar = New-Object System.Windows.Forms.ToolStrip
+    $toolbar.Dock = 'Top'
+    $toolbar.GripStyle = 'Hidden'
+    $toolbar.Font = $script:UiFont
+    $toolbar.Padding = New-Object System.Windows.Forms.Padding(6, 4, 6, 4)
+    $groups = @(
+        @('新增項目', '新增分類', '隱藏'),
+        @('上移', '下移'),
+        @('檢查連結', '上傳到 Release', '預覽線上'),
+        @('重新載入', '儲存並發布')
+    )
     $script:Buttons = @{}
-    foreach ($name in $names) {
-        $button = New-Object System.Windows.Forms.Button
-        $button.Text = $name
-        $button.AutoSize = $true
-        $button.Margin = New-Object System.Windows.Forms.Padding(4)
-        $button.Tag = $name
-        [void]$buttons.Controls.Add($button)
-        $script:Buttons[$name] = $button
+    for ($g = 0; $g -lt $groups.Count; $g++) {
+        if ($g -gt 0) { [void]$toolbar.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator)) }
+        foreach ($name in $groups[$g]) {
+            $button = New-Object System.Windows.Forms.ToolStripButton
+            $button.Text = $name
+            $button.DisplayStyle = 'Text'
+            $button.Padding = New-Object System.Windows.Forms.Padding(6, 2, 6, 2)
+            $button.Tag = $name
+            [void]$toolbar.Items.Add($button)
+            $script:Buttons[$name] = $button
+        }
     }
+    $script:Buttons['儲存並發布'].Font = New-Object System.Drawing.Font($script:UiFont, [System.Drawing.FontStyle]::Bold)
     $script:HideButton = $script:Buttons['隱藏']
 
     $left = New-Object System.Windows.Forms.Panel
@@ -261,7 +275,6 @@ function Show-LanyenEditor {
     $searchLabel.Dock = 'Top'
     $searchLabel.Height = 24
     $left.Controls.Add($script:Tree)
-    $left.Controls.Add($buttons)
     $left.Controls.Add($script:Search)
     $left.Controls.Add($searchLabel)
     $split.Panel1.Controls.Add($left)
@@ -326,15 +339,15 @@ function Show-LanyenEditor {
     $right.Controls.Add($script:CategoryPanel)
     $split.Panel2.Controls.Add($right)
     $form.Controls.Add($split)
+    $form.Controls.Add($toolbar)
 
-    $script:Status = New-Object System.Windows.Forms.StatusStrip
+    $statusStrip = New-Object System.Windows.Forms.StatusStrip
     $statusLabel = New-Object System.Windows.Forms.ToolStripStatusLabel
     $statusLabel.Spring = $true
     $statusLabel.TextAlign = 'MiddleLeft'
-    [void]$script:Status.Items.Add($statusLabel)
+    [void]$statusStrip.Items.Add($statusLabel)
     $script:Status = $statusLabel
-    $bar = $statusLabel.GetCurrentParent()
-    $form.Controls.Add($bar)
+    $form.Controls.Add($statusStrip)
 
     $script:Search.Add_TextChanged({ Update-LanyenTree $script:SelectedKey })
     $script:Tree.Add_BeforeSelect({

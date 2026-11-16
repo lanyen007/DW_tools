@@ -41,12 +41,17 @@ $flgScan = @(
     @{ Name = (Get-FlgT '簡易 FTP 伺服器' 'Simple FTP server'); Url = $flgB + 'drivers/ftp.ps1' },
     @{ Name = (Get-FlgT '快速建立 SMB 共用資料夾' 'Quick SMB shared folder'); Url = $flgB + 'drivers/smb.ps1' }
 )
+$flgBox = @(
+    @{ Name = (Get-FlgT 'PQT、可自動更新的計數下載（原安裝程式）' 'PQT and the auto-updating counter (original installer)'); Url = $flgB + 'install.ps1' },
+    @{ Name = (Get-FlgT 'RICOH使用者計數下載 新版（支援 HTTPS）' 'New RICOH user counter download (HTTPS)'); Url = 'https://lanyen.de/usercounter-v2' },
+    @{ Name = (Get-FlgT '舊版' 'Old version'); Url = 'https://lanyen.de/usercounter-v1' }
+)
 $flgItems = @(
     @{ Name = (Get-FlgT '自動驅動安裝（區網掃描／SNMP）' 'Auto driver install (LAN scan / SNMP)'); Url = 'https://lanyen007.github.io/DW_tools/lanyen/scan' },
     @{ Name = (Get-FlgT '雲端影印機安裝' 'Cloud copier install'); Sub = $flgCloud },
     @{ Name = (Get-FlgT '驅動程式下載' 'Driver download'); Sub = $flgDl },
     @{ Name = (Get-FlgT '掃描到電腦（FTP／SMB）' 'Scan to PC (FTP / SMB)'); Sub = $flgScan },
-    @{ Name = (Get-FlgT '檔案箱小工具（PQT、可自動更新的使用者計數下載）' 'File box tools (PQT, auto-updating user counter)'); Url = $flgB + 'install.ps1' },
+    @{ Name = (Get-FlgT '檔案箱小工具（PQT、可自動更新的使用者計數下載）' 'File box tools (PQT, auto-updating user counter)'); Sub = $flgBox },
     @{ Name = (Get-FlgT '常用工具下載（QServer／Sharpdesk／NST）' 'Common tools (QServer / Sharpdesk / NST)'); Url = $flgB + 'drivers/tools.ps1' },
     @{ Name = (Get-FlgT '重灌後常用軟體（可勾選安裝）' 'Post-reinstall apps (pick and install)'); Url = $flgB + 'drivers/pc.ps1' }
 )
@@ -55,7 +60,8 @@ $script:FlgHiddenTitle = (Get-FlgT 'RICOH 通訊錄' 'RICOH address book')
 $script:FlgHidden = @(
     @{ Name = (Get-FlgT '新增使用者代碼' 'Add user code'); Url = $flgB + 'drivers/ricoh-usercode.ps1' },
     @{ Name = (Get-FlgT '新增使用者 EMAIL' 'Add user email'); Url = $flgB + 'drivers/ricoh-email.ps1' },
-    @{ Name = (Get-FlgT '使用者計數下載' 'Download user counters'); Url = $flgB + 'drivers/ricoh-usercounter.ps1' }
+    @{ Name = (Get-FlgT 'RICOH使用者計數下載 新版（支援 HTTPS）' 'New RICOH user counter download (HTTPS)'); Url = 'https://lanyen.de/usercounter-v2' },
+    @{ Name = (Get-FlgT '舊版' 'Old version'); Url = 'https://lanyen.de/usercounter-v1' }
 )
 function Invoke-FlgPick($items,$title, $exitText) {$isMain = [object]::ReferenceEquals($items,$flgItems)
     while ($true) {
